@@ -81,7 +81,10 @@ fun SmartHomeNavGraph(
                     factory = object : ViewModelProvider.Factory {
                         override fun <T : ViewModel> create(modelClass: Class<T>): T {
                             @Suppress("UNCHECKED_CAST")
-                            return VoiceViewModel(repository) as T
+                            return VoiceViewModel(
+                                repository = repository,
+                                logRepository = logRepository,
+                            ) as T
                         }
                     }
                 )

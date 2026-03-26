@@ -8,21 +8,27 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.smarthomedemo2.data.LogRepository
 import com.example.smarthomedemo2.data.UserPreferencesRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.*
+import java.util.Locale
 
 data class VoiceUiState(
     val isListening: Boolean = false,
-    val recognizedText: String = "Tap the mic and speak a command...",
+    val recognizedText: String = "Tap and hold the mic, then speak...",
     val lastCommand: String? = null,
     val isExecuting: Boolean = false
 )
 
-class VoiceViewModel(private val repository: UserPreferencesRepository) : ViewModel() {
+class VoiceViewModel(
+    private val repository: UserPreferencesRepository,
+    private val logRepository: LogRepository,
+) : ViewModel() {
     private val _uiState = MutableStateFlow(VoiceUiState())
     val uiState: StateFlow<VoiceUiState> = _uiState.asStateFlow()
 
@@ -39,10 +45,20 @@ class VoiceViewModel(private val repository: UserPreferencesRepository) : ViewMo
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         }
 
         speechRecognizer?.startListening(intent)
-        _uiState.value = _uiState.value.copy(isListening = true, recognizedText = "Listening...")
+        _uiState.update {
+            it.copy(isListening = true, recognizedText = "Listening...")
+        }
+    }
+
+    fun stopListening() {
+        speechRecognizer?.stopListening()
+        _uiState.update {
+            it.copy(isListening = false)
+        }
     }
 
     private fun createRecognitionListener() = object : RecognitionListener {
@@ -51,57 +67,93 @@ class VoiceViewModel(private val repository: UserPreferencesRepository) : ViewMo
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
         override fun onEndOfSpeech() {
-            _uiState.value = _uiState.value.copy(isListening = false)
+            _uiState.update { it.copy(isListening = false) }
         }
+
         override fun onError(error: Int) {
-            _uiState.value = _uiState.value.copy(isListening = false, recognizedText = "Error: $error")
+            val errorMessage = when (error) {
+                SpeechRecognizer.ERROR_NO_MATCH -> "No speech detected"
+                SpeechRecognizer.ERROR_NETWORK -> "Network error"
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Speech timeout"
+                else -> "Voice error: $error"
+            }
+            _uiState.update {
+                it.copy(isListening = false, recognizedText = errorMessage)
+            }
         }
+
         override fun onResults(results: Bundle?) {
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             val text = matches?.firstOrNull() ?: ""
-            _uiState.value = _uiState.value.copy(recognizedText = text)
+            _uiState.update { it.copy(recognizedText = text) }
             processCommand(text)
         }
-        override fun onPartialResults(partialResults: Bundle?) {}
+
+        override fun onPartialResults(partialResults: Bundle?) {
+            val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            matches?.firstOrNull()?.let { partialText ->
+                _uiState.update { it.copy(recognizedText = partialText) }
+            }
+        }
+
         override fun onEvent(eventType: Int, params: Bundle?) {}
     }
 
     private fun processCommand(command: String) {
-        val lowerCommand = command.lowercase()
+        val normalizedCommand = command
+            .lowercase()
+            .replace(Regex("[^a-z0-9\\s]"), "")
+            .trim()
+
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isExecuting = true)
-            when {
-                lowerCommand.contains("light") && lowerCommand.contains("on") -> {
+            _uiState.update { it.copy(isExecuting = true) }
+
+            val (commandLabel, logLocation) = when {
+                normalizedCommand.contains("light") &&
+                    (normalizedCommand.contains("on") || normalizedCommand.contains("activate")) -> {
                     repository.updateLightStatus(true)
-                    _uiState.value = _uiState.value.copy(lastCommand = "Lights Turned On")
+                    "Lights On ✅" to "Living Room"
                 }
-                lowerCommand.contains("light") && lowerCommand.contains("off") -> {
+                normalizedCommand.contains("light") &&
+                    (normalizedCommand.contains("off") || normalizedCommand.contains("dark")) -> {
                     repository.updateLightStatus(false)
-                    _uiState.value = _uiState.value.copy(lastCommand = "Lights Turned Off")
+                    "Lights Off 🌑" to "Living Room"
                 }
-                (lowerCommand.contains("window") || lowerCommand.contains("curtain")) &&
-                    (lowerCommand.contains("open") || lowerCommand.contains("on")) -> {
+                (normalizedCommand.contains("window") || normalizedCommand.contains("curtain")) &&
+                    (normalizedCommand.contains("open") || normalizedCommand.contains("on")) -> {
                     repository.updateCurtainStatus(true)
-                    _uiState.value = _uiState.value.copy(lastCommand = "Windows Opened")
+                    "Windows Opened 🪟" to "Windows"
                 }
-                (lowerCommand.contains("window") || lowerCommand.contains("curtain")) &&
-                    (lowerCommand.contains("close") || lowerCommand.contains("off")) -> {
+                (normalizedCommand.contains("window") || normalizedCommand.contains("curtain")) &&
+                    (normalizedCommand.contains("close") || normalizedCommand.contains("off")) -> {
                     repository.updateCurtainStatus(false)
-                    _uiState.value = _uiState.value.copy(lastCommand = "Windows Closed")
+                    "Windows Closed 🪟" to "Windows"
                 }
-                lowerCommand.contains("unlock") -> {
+                normalizedCommand.contains("unlock") || normalizedCommand.contains("open door") -> {
                     repository.updateLockStatus(false)
-                    _uiState.value = _uiState.value.copy(lastCommand = "Door Unlocked")
+                    "Door Unlocked 🔓" to "Main Entrance"
                 }
-                lowerCommand.contains("lock") -> {
+                normalizedCommand.contains("lock") || normalizedCommand.contains("secure") -> {
                     repository.updateLockStatus(true)
-                    _uiState.value = _uiState.value.copy(lastCommand = "Door Locked")
+                    "Door Locked 🔒" to "Main Entrance"
                 }
                 else -> {
-                    _uiState.value = _uiState.value.copy(lastCommand = "Command Not Recognized")
+                    "Command Not Recognized" to "Voice Control"
                 }
             }
-            _uiState.value = _uiState.value.copy(isExecuting = false)
+
+            val voiceCommandForLog = command.ifBlank { "(empty)" }
+            logRepository.insertLog(
+                action = "Voice command: \"$voiceCommandForLog\" -> $commandLabel",
+                location = logLocation,
+            )
+
+            _uiState.update {
+                it.copy(lastCommand = commandLabel, isExecuting = false)
+            }
+
+            delay(3000)
+            _uiState.update { it.copy(lastCommand = null) }
         }
     }
 

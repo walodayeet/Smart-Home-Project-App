@@ -1,7 +1,13 @@
 package com.example.smarthomedemo2.ui.voice
 
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -13,11 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -29,7 +36,7 @@ fun VoiceScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val recordPermissionState = rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -88,27 +95,36 @@ fun VoiceScreen(
                 )
             }
 
-            Button(
-                onClick = {
-                    if (recordPermissionState.status.isGranted) {
-                        viewModel.startListening(context)
-                    } else {
-                        recordPermissionState.launchPermissionRequest()
-                    }
-                },
+            Surface(
                 shape = CircleShape,
-                modifier = Modifier.size(100.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (uiState.isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                ),
-                contentPadding = PaddingValues(0.dp)
+                color = if (uiState.isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(100.dp)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onPress = {
+                                if (recordPermissionState.status.isGranted) {
+                                    try {
+                                        viewModel.startListening(context)
+                                        awaitRelease()
+                                    } finally {
+                                        viewModel.stopListening()
+                                    }
+                                } else {
+                                    recordPermissionState.launchPermissionRequest()
+                                }
+                            }
+                        )
+                    }
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Mic,
-                    contentDescription = "Microphone",
-                    modifier = Modifier.size(48.dp),
-                    tint = Color.White
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Rounded.Mic,
+                        contentDescription = "Hold to speak",
+                        modifier = Modifier.size(48.dp),
+                        tint = Color.White
+                    )
+                }
             }
         }
 
