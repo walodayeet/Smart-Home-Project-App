@@ -1,5 +1,6 @@
 package com.example.smarthomedemo2.ui.camera
 
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.view.ViewGroup
 import androidx.camera.core.CameraSelector
@@ -42,15 +43,57 @@ fun CameraScreen(
 ) {
     val cameraPermissionState = rememberPermissionState(android.Manifest.permission.CAMERA)
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val hasAnyCamera = remember(context) {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+    }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
+    var previewReady by remember { mutableStateOf(false) }
 
     Surface(
         modifier = modifier.fillMaxSize(),
         color = Color.Black
     ) {
-        if (cameraPermissionState.status.isGranted) {
+        if (!hasAnyCamera) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                IconButton(
+                    onClick = onNavigateBack,
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .offset(y = (-32).dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
+                }
+                Text(
+                    "No camera is available on this emulator/device. In Android Studio, map the emulator Front Camera to webcam0 and cold boot the device.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else if (cameraPermissionState.status.isGranted) {
             Box(modifier = Modifier.fillMaxSize()) {
-                CameraPreview(onPreviewReady = { previewView = it })
+                CameraPreview(
+                    onPreviewReady = {
+                        previewView = it
+                    },
+                    onPreviewAvailable = {
+                        previewReady = true
+                    },
+                    onPreviewUnavailable = {
+                        previewReady = false
+                    }
+                )
 
                 if (uiState.showBoundingBox) {
                     FaceBoundingBox(
@@ -129,7 +172,7 @@ fun CameraScreen(
                                     viewModel.startScan(bitmap.toJpegBytes())
                                 }
                             },
-                            enabled = !uiState.isScanning && previewView?.bitmap != null,
+                            enabled = !uiState.isScanning && previewReady,
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
@@ -184,6 +227,8 @@ fun CameraScreen(
 @Composable
 fun CameraPreview(
     onPreviewReady: (PreviewView) -> Unit,
+    onPreviewAvailable: () -> Unit,
+    onPreviewUnavailable: () -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -206,12 +251,24 @@ fun CameraPreview(
                     it.surfaceProvider = previewView.surfaceProvider
                 }
 
-                val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
+                val frontCameraAvailable = cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
+                val backCameraAvailable = cameraProvider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)
+                val cameraSelector = when {
+                    frontCameraAvailable -> CameraSelector.DEFAULT_FRONT_CAMERA
+                    backCameraAvailable -> CameraSelector.DEFAULT_BACK_CAMERA
+                    else -> null
+                }
 
                 try {
                     cameraProvider.unbindAll()
-                    cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview)
+                    if (cameraSelector == null) {
+                        onPreviewUnavailable()
+                    } else {
+                        cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview)
+                        onPreviewAvailable()
+                    }
                 } catch (_: Exception) {
+                    onPreviewUnavailable()
                 }
             }, ContextCompat.getMainExecutor(context))
 
