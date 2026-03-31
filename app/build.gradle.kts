@@ -16,7 +16,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "FACE_RECOGNITION_BASE_URL", "\"http://10.0.2.2:5000/\"")
+        buildConfigField("String", "FACE_RECOGNITION_BASE_URL", "\"http://100.126.227.19:5000/\"")
     }
 
     buildTypes {
