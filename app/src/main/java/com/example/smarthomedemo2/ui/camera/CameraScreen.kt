@@ -141,7 +141,7 @@ fun CameraScreen(
                         ) {
                             Icon(Icons.Rounded.CenterFocusStrong, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (uiState.isScanning) "SCANNING..." else "IDENTIFY & UNLOCK")
+                            Text(if (uiState.isScanning) "VERIFYING..." else "VERIFY IDENTITY")
                         }
                     }
                 }

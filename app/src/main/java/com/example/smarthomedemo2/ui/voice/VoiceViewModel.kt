@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -22,7 +23,8 @@ data class VoiceUiState(
     val isListening: Boolean = false,
     val recognizedText: String = "Tap and hold the mic, then speak...",
     val lastCommand: String? = null,
-    val isExecuting: Boolean = false
+    val isExecuting: Boolean = false,
+    val isOwnerAuthenticated: Boolean = false,
 )
 
 class VoiceViewModel(
@@ -33,6 +35,17 @@ class VoiceViewModel(
     val uiState: StateFlow<VoiceUiState> = _uiState.asStateFlow()
 
     private var speechRecognizer: SpeechRecognizer? = null
+
+    init {
+        viewModelScope.launch {
+            repository.userPreferencesFlow.collect { preferences ->
+                _uiState.update { currentState ->
+                    currentState.copy(isOwnerAuthenticated = preferences.isOwnerAuthenticated)
+                }
+            }
+        }
+    }
+
 
     fun startListening(context: Context) {
         if (_uiState.value.isListening) return
@@ -130,13 +143,18 @@ class VoiceViewModel(
                     "Windows Closed 🪟" to "Windows"
                 }
                 normalizedCommand.contains("unlock") || normalizedCommand.contains("open door") -> {
-                    repository.updateLockStatus(false)
-                    "Door Unlocked 🔓" to "Main Entrance"
+                    if (!_uiState.value.isOwnerAuthenticated) {
+                        "Identity verification required" to "Voice Control"
+                    } else {
+                        repository.updateLockStatus(false)
+                        "Door Unlocked 🔓" to "Main Entrance"
+                    }
                 }
                 normalizedCommand.contains("lock") || normalizedCommand.contains("secure") -> {
                     repository.updateLockStatus(true)
                     "Door Locked 🔒" to "Main Entrance"
                 }
+
                 else -> {
                     "Command Not Recognized" to "Voice Control"
                 }

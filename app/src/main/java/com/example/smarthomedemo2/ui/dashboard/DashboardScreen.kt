@@ -46,15 +46,32 @@ fun DashboardScreen(
             curtainStatus = uiState.curtainStatus,
             isAlarmArmed = uiState.isAlarmArmed,
             isAlarmTriggered = uiState.isAlarmTriggered,
+            isOwnerAuthenticated = uiState.isOwnerAuthenticated,
             onToggleLights = { viewModel.toggleLights() },
-            onToggleLock = { viewModel.toggleLock() },
+            onToggleLock = {
+                if (uiState.lockStatus && !uiState.isOwnerAuthenticated) {
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar("Verify identity before unlocking the main entrance")
+                    }
+                } else {
+                    viewModel.toggleLock()
+                }
+            },
             onToggleCurtains = { viewModel.toggleCurtains() },
-            onToggleAlarm = { 
-                viewModel.toggleAlarm()
-                val message = if (!uiState.isAlarmArmed) "Alarm ARMED, House Secured" else "Alarm UNARMED"
-                scope.launch {
-                    snackbarHostState.currentSnackbarData?.dismiss()
-                    snackbarHostState.showSnackbar(message)
+            onToggleAlarm = {
+                if (uiState.isAlarmArmed && !uiState.isOwnerAuthenticated) {
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar("Verify identity before disarming the alarm")
+                    }
+                } else {
+                    viewModel.toggleAlarm()
+                    val message = if (!uiState.isAlarmArmed) "Alarm ARMED, House Secured" else "Alarm DISARMED"
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar(message)
+                    }
                 }
             },
             onTriggerManualAlarm = {
@@ -78,6 +95,7 @@ fun DashboardContent(
     curtainStatus: Boolean,
     isAlarmArmed: Boolean,
     isAlarmTriggered: Boolean,
+    isOwnerAuthenticated: Boolean,
     onToggleLights: () -> Unit,
     onToggleLock: () -> Unit,
     onToggleCurtains: () -> Unit,
@@ -217,6 +235,21 @@ fun DashboardContent(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            AssistChip(
+                onClick = onNavigateToCamera,
+                label = {
+                    Text(if (isOwnerAuthenticated) "Owner Verified" else "Restricted Mode")
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = if (isOwnerAuthenticated) Icons.Rounded.VerifiedUser else Icons.Rounded.Lock,
+                        contentDescription = null,
+                    )
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Quick Actions Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -242,7 +275,11 @@ fun DashboardContent(
                     DeviceControlCard(
                         title = "Main Entrance",
                         statusText = if (lockStatus) "Locked" else "Unlocked",
-                        actionText = if (lockStatus) "Unlock" else "Lock",
+                        actionText = if (lockStatus) {
+                            if (isOwnerAuthenticated) "Unlock" else "Verify to Unlock"
+                        } else {
+                            "Lock"
+                        },
                         icon = if (lockStatus) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
                         isActive = lockStatus,
                         onClick = onToggleLock
@@ -270,11 +307,11 @@ fun DashboardContent(
                 }
                 item {
                     DeviceControlCard(
-                        title = "Security Cam",
-                        statusText = "Live Feed",
-                        actionText = "View",
+                        title = "Access Control",
+                        statusText = if (isOwnerAuthenticated) "Owner Verified" else "Verification Required",
+                        actionText = if (isOwnerAuthenticated) "Verified" else "Verify",
                         icon = Icons.Rounded.Videocam,
-                        isActive = true,
+                        isActive = isOwnerAuthenticated,
                         onClick = onNavigateToCamera
                     )
                 }
@@ -365,6 +402,7 @@ fun DashboardPreview() {
             curtainStatus = false,
             isAlarmArmed = false,
             isAlarmTriggered = false,
+            isOwnerAuthenticated = false,
             onToggleLights = {},
             onToggleLock = {},
             onToggleCurtains = {},

@@ -105,7 +105,14 @@ class DashboardViewModel(
 
     fun toggleLock() {
         viewModelScope.launch {
-            val newState = !uiState.value.lockStatus
+            val currentState = uiState.value.lockStatus
+            val wantsUnlock = currentState
+            if (wantsUnlock && !uiState.value.isOwnerAuthenticated) {
+                logRepository.insertLog("Protected action blocked: identity verification required", "Entrance")
+                return@launch
+            }
+
+            val newState = !currentState
             repository.updateLockStatus(newState)
             logRepository.insertLog("Main Door ${if (newState) "LOCKED" else "UNLOCKED"}", "Entrance")
         }
@@ -121,7 +128,14 @@ class DashboardViewModel(
 
     fun toggleAlarm() {
         viewModelScope.launch {
-            val newState = !uiState.value.isAlarmArmed
+            val currentState = uiState.value.isAlarmArmed
+            val wantsDisarm = currentState
+            if (wantsDisarm && !uiState.value.isOwnerAuthenticated) {
+                logRepository.insertLog("Protected action blocked: identity verification required", "System")
+                return@launch
+            }
+
+            val newState = !currentState
             repository.updateAlarmArmed(newState)
             logRepository.insertLog("Security Alarm ${if (newState) "ARMED" else "DISARMED"}", "System")
         }

@@ -11,7 +11,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.VerifiedUser
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -65,6 +68,22 @@ fun VoiceScreen(
             fontWeight = FontWeight.Bold
         )
         
+        Spacer(modifier = Modifier.height(16.dp))
+
+        AssistChip(
+            onClick = {},
+            enabled = false,
+            label = {
+                Text(if (uiState.isOwnerAuthenticated) "Owner Verified" else "Restricted for sensitive commands")
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = if (uiState.isOwnerAuthenticated) Icons.Rounded.VerifiedUser else Icons.Rounded.Lock,
+                    contentDescription = null,
+                )
+            }
+        )
+
         Spacer(modifier = Modifier.height(16.dp))
         
         Text(

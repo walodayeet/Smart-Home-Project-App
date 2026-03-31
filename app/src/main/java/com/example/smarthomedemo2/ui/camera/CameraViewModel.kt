@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.smarthomedemo2.data.FaceRecognitionRepository
 import com.example.smarthomedemo2.data.LogRepository
 import com.example.smarthomedemo2.data.UserPreferencesRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,10 +15,10 @@ import kotlinx.coroutines.launch
 
 data class CameraUiState(
     val isScanning: Boolean = false,
-    val recognitionStatus: String = "Monitoring main entrance...",
+    val recognitionStatus: String = "Ready for identity verification",
     val recognizedName: String? = null,
     val showBoundingBox: Boolean = false,
-    val serviceMessage: String = "Ready to identify visitors",
+    val serviceMessage: String = "Verify owner to enable protected controls",
 )
 
 class CameraViewModel(
@@ -27,6 +28,7 @@ class CameraViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CameraUiState())
     val uiState: StateFlow<CameraUiState> = _uiState.asStateFlow()
+    private var authenticationResetJob: Job? = null
 
     fun startScan(imageBytes: ByteArray) {
         if (_uiState.value.isScanning) return
@@ -34,7 +36,7 @@ class CameraViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isScanning = true,
-                recognitionStatus = "Scanning visitor...",
+                recognitionStatus = "Verifying identity...",
                 showBoundingBox = true,
                 recognizedName = null,
                 serviceMessage = "Uploading frame to recognition service",
@@ -44,29 +46,26 @@ class CameraViewModel(
             result.onSuccess { response ->
                 val primaryMatch = response.primaryMatch
                 if (response.ownerRecognized && primaryMatch != null) {
-                    repository.updateLockStatus(false)
-                    repository.updateAlarmArmed(false)
+                    repository.updateOwnerAuthenticated(true)
                     repository.updateAlarmTriggered(false)
                     logRepository.insertLog(
-                        action = "Owner recognized: ${primaryMatch.name}",
+                        action = "Owner verified by face recognition: ${primaryMatch.name}",
                         location = "Main Entrance Camera",
                     )
                     logRepository.insertLog(
-                        action = "Main Door UNLOCKED by face recognition",
-                        location = "Entrance",
-                    )
-                    logRepository.insertLog(
-                        action = "Security Alarm DISARMED by face recognition",
+                        action = "Protected controls enabled",
                         location = "System",
                     )
+                    scheduleAuthenticationReset()
                     _uiState.value = _uiState.value.copy(
                         isScanning = false,
-                        recognitionStatus = "Owner detected - entrance unlocked",
+                        recognitionStatus = "Owner verified - access granted",
                         recognizedName = primaryMatch.name,
                         showBoundingBox = true,
-                        serviceMessage = "Confidence ${(primaryMatch.confidence * 100).toInt()}%",
+                        serviceMessage = "Confidence ${(primaryMatch.confidence * 100).toInt()}% · Access enabled for 60 seconds",
                     )
                 } else {
+                    repository.updateOwnerAuthenticated(false)
                     logRepository.insertLog(
                         action = "Unknown visitor detected",
                         location = "Main Entrance Camera",
@@ -74,7 +73,7 @@ class CameraViewModel(
                     repository.updateAlarmTriggered(true)
                     _uiState.value = _uiState.value.copy(
                         isScanning = false,
-                        recognitionStatus = "Unknown visitor detected",
+                        recognitionStatus = "Identity verification failed",
                         recognizedName = null,
                         showBoundingBox = true,
                         serviceMessage = response.message,
@@ -93,8 +92,20 @@ class CameraViewModel(
             delay(3500)
             _uiState.value = _uiState.value.copy(
                 showBoundingBox = false,
-                recognitionStatus = "Monitoring main entrance...",
-                serviceMessage = "Ready to identify visitors",
+                recognitionStatus = "Ready for identity verification",
+                serviceMessage = "Verify owner to enable protected controls",
+            )
+        }
+    }
+
+    private fun scheduleAuthenticationReset() {
+        authenticationResetJob?.cancel()
+        authenticationResetJob = viewModelScope.launch {
+            delay(60_000)
+            repository.updateOwnerAuthenticated(false)
+            logRepository.insertLog(
+                action = "Owner verification expired",
+                location = "System",
             )
         }
     }

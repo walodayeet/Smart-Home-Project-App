@@ -23,6 +23,7 @@ data class UserPreferences(
     val automaticLocking: Boolean = true,
     val isAlarmArmed: Boolean = false,
     val isAlarmTriggered: Boolean = false,
+    val isOwnerAuthenticated: Boolean = false,
     val isDarkTheme: Boolean? = null // null means system default
 )
 
@@ -35,6 +36,7 @@ class UserPreferencesRepository(private val context: Context) {
         val AUTOMATIC_LOCKING = booleanPreferencesKey("automatic_locking")
         val IS_ALARM_ARMED = booleanPreferencesKey("is_alarm_armed")
         val IS_ALARM_TRIGGERED = booleanPreferencesKey("is_alarm_triggered")
+        val IS_OWNER_AUTHENTICATED = booleanPreferencesKey("is_owner_authenticated")
         val IS_DARK_THEME = booleanPreferencesKey("is_dark_theme")
         val HAS_THEME_PREFERENCE = booleanPreferencesKey("has_theme_preference")
     }
@@ -57,6 +59,7 @@ class UserPreferencesRepository(private val context: Context) {
                 automaticLocking = preferences[PreferencesKeys.AUTOMATIC_LOCKING] ?: true,
                 isAlarmArmed = preferences[PreferencesKeys.IS_ALARM_ARMED] ?: false,
                 isAlarmTriggered = preferences[PreferencesKeys.IS_ALARM_TRIGGERED] ?: false,
+                isOwnerAuthenticated = preferences[PreferencesKeys.IS_OWNER_AUTHENTICATED] ?: false,
                 isDarkTheme = if (hasThemePreference) preferences[PreferencesKeys.IS_DARK_THEME] else null
             )
         }
@@ -100,6 +103,12 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun updateAlarmTriggered(isTriggered: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.IS_ALARM_TRIGGERED] = isTriggered
+        }
+    }
+
+    suspend fun updateOwnerAuthenticated(isAuthenticated: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.IS_OWNER_AUTHENTICATED] = isAuthenticated
         }
     }
 
