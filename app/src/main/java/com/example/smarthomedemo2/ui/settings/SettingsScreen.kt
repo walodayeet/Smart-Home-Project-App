@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
@@ -25,17 +26,62 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    SettingsContent(
-        doorLockTimer = uiState.doorLockTimer,
-        automaticLocking = uiState.automaticLocking,
-        isDarkTheme = uiState.isDarkTheme,
-        onTimerChange = { viewModel.updateDoorLockTimer(it) },
-        onToggleAutoLock = { viewModel.toggleAutomaticLocking(it) },
-        onThemeChange = { viewModel.updateDarkTheme(it) },
-        onNavigateToLog = onNavigateToLog,
-        modifier = modifier
-    )
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        modifier = modifier.fillMaxSize()
+    ) { paddingValues ->
+        SettingsContent(
+            doorLockTimer = uiState.doorLockTimer,
+            automaticLocking = uiState.automaticLocking,
+            isDarkTheme = uiState.isDarkTheme,
+            isOwnerAuthenticated = uiState.isOwnerAuthenticated,
+            onTimerChange = {
+                if (!uiState.isOwnerAuthenticated) {
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar("Verify identity before changing settings")
+                    }
+                } else {
+                    viewModel.updateDoorLockTimer(it)
+                }
+            },
+            onToggleAutoLock = {
+                if (!uiState.isOwnerAuthenticated) {
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar("Verify identity before changing settings")
+                    }
+                } else {
+                    viewModel.toggleAutomaticLocking(it)
+                }
+            },
+            onThemeChange = {
+                if (!uiState.isOwnerAuthenticated) {
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar("Verify identity before changing settings")
+                    }
+                } else {
+                    viewModel.updateDarkTheme(it)
+                }
+            },
+            onNavigateToLog = {
+                if (!uiState.isOwnerAuthenticated) {
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar("Verify identity before opening settings pages")
+                    }
+                } else {
+                    onNavigateToLog()
+                }
+            },
+            modifier = Modifier.padding(paddingValues)
+        )
+    }
+
 }
 
 @Composable
@@ -43,6 +89,7 @@ fun SettingsContent(
     doorLockTimer: Int,
     automaticLocking: Boolean,
     isDarkTheme: Boolean?,
+    isOwnerAuthenticated: Boolean,
     onTimerChange: (Int) -> Unit,
     onToggleAutoLock: (Boolean) -> Unit,
     onThemeChange: (Boolean?) -> Unit,
@@ -65,14 +112,32 @@ fun SettingsContent(
         
         Spacer(modifier = Modifier.height(32.dp))
 
+        AssistChip(
+            onClick = { },
+            enabled = false,
+            label = {
+                Text(if (isOwnerAuthenticated) "Owner Verified" else "Verify identity to change settings")
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = if (isOwnerAuthenticated) Icons.Rounded.VerifiedUser else Icons.Rounded.Lock,
+                    contentDescription = null,
+                )
+            }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         SettingsSection(title = "Appearance") {
             Text(
                 text = "Theme Mode",
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (isOwnerAuthenticated) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                 fontWeight = FontWeight.SemiBold
             )
+
             Spacer(modifier = Modifier.height(8.dp))
+
             
             val options = listOf("System", "Light", "Dark")
             val selectedOption = when (isDarkTheme) {
@@ -94,7 +159,8 @@ fun SettingsContent(
                                 }
                             )
                         },
-                        selected = label == selectedOption
+                        selected = label == selectedOption,
+                        enabled = isOwnerAuthenticated
                     ) {
                         Text(label)
                     }
@@ -110,6 +176,7 @@ fun SettingsContent(
                 description = "Automatically lock the main door after a delay.",
                 icon = Icons.Rounded.Security,
                 isSelected = automaticLocking,
+                enabled = isOwnerAuthenticated,
                 onCheckedChange = onToggleAutoLock
             )
             
@@ -123,7 +190,7 @@ fun SettingsContent(
                 steps = 23,
                 unit = "sec",
                 icon = Icons.Rounded.LockClock,
-                enabled = automaticLocking
+                enabled = automaticLocking && isOwnerAuthenticated
             )
         }
 
@@ -134,6 +201,7 @@ fun SettingsContent(
                 title = "Activity Log",
                 description = "View recent entry and exit events.",
                 icon = Icons.Rounded.History,
+                enabled = isOwnerAuthenticated,
                 onClick = onNavigateToLog
             )
             
@@ -143,6 +211,7 @@ fun SettingsContent(
                 title = "Device Management",
                 description = "Add or remove smart devices.",
                 icon = Icons.Rounded.Settings,
+                enabled = isOwnerAuthenticated,
                 onClick = {} // Future implementation
             )
         }
@@ -181,6 +250,7 @@ fun SettingsToggleItem(
     description: String,
     icon: ImageVector,
     isSelected: Boolean,
+    enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
@@ -190,7 +260,11 @@ fun SettingsToggleItem(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = when {
+                !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                isSelected -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
             modifier = Modifier.size(24.dp)
         )
         Spacer(modifier = Modifier.width(16.dp))
@@ -198,18 +272,19 @@ fun SettingsToggleItem(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                 fontWeight = FontWeight.SemiBold
             )
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
             )
         }
         Switch(
             checked = isSelected,
             onCheckedChange = onCheckedChange,
+            enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = MaterialTheme.colorScheme.primary,
                 checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
@@ -272,18 +347,19 @@ fun SettingsNavigationItem(
     title: String,
     description: String,
     icon: ImageVector,
+    enabled: Boolean,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
             modifier = Modifier.size(24.dp)
         )
         Spacer(modifier = Modifier.width(16.dp))
@@ -291,13 +367,13 @@ fun SettingsNavigationItem(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                 fontWeight = FontWeight.SemiBold
             )
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
             )
         }
     }

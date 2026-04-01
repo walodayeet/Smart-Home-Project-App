@@ -47,7 +47,16 @@ fun DashboardScreen(
             isAlarmArmed = uiState.isAlarmArmed,
             isAlarmTriggered = uiState.isAlarmTriggered,
             isOwnerAuthenticated = uiState.isOwnerAuthenticated,
-            onToggleLights = { viewModel.toggleLights() },
+            onToggleLights = {
+                if (!uiState.isOwnerAuthenticated) {
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar("Verify identity before controlling the lights")
+                    }
+                } else {
+                    viewModel.toggleLights()
+                }
+            },
             onToggleLock = {
                 if (uiState.lockStatus && !uiState.isOwnerAuthenticated) {
                     scope.launch {
@@ -58,12 +67,21 @@ fun DashboardScreen(
                     viewModel.toggleLock()
                 }
             },
-            onToggleCurtains = { viewModel.toggleCurtains() },
-            onToggleAlarm = {
-                if (uiState.isAlarmArmed && !uiState.isOwnerAuthenticated) {
+            onToggleCurtains = {
+                if (!uiState.isOwnerAuthenticated) {
                     scope.launch {
                         snackbarHostState.currentSnackbarData?.dismiss()
-                        snackbarHostState.showSnackbar("Verify identity before disarming the alarm")
+                        snackbarHostState.showSnackbar("Verify identity before controlling the windows")
+                    }
+                } else {
+                    viewModel.toggleCurtains()
+                }
+            },
+            onToggleAlarm = {
+                if (!uiState.isOwnerAuthenticated) {
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar("Verify identity before controlling the alarm")
                     }
                 } else {
                     viewModel.toggleAlarm()
@@ -75,11 +93,18 @@ fun DashboardScreen(
                 }
             },
             onTriggerManualAlarm = {
-                viewModel.triggerManualAlarm()
-                val message = if (!uiState.isAlarmTriggered) "MANUAL ALARM TRIGGERED" else "ALARM DEACTIVATED"
-                scope.launch {
-                    snackbarHostState.currentSnackbarData?.dismiss()
-                    snackbarHostState.showSnackbar(message)
+                if (!uiState.isOwnerAuthenticated) {
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar("Verify identity before controlling the alarm")
+                    }
+                } else {
+                    viewModel.triggerManualAlarm()
+                    val message = if (!uiState.isAlarmTriggered) "MANUAL ALARM TRIGGERED" else "ALARM DEACTIVATED"
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar(message)
+                    }
                 }
             },
             onNavigateToCamera = onNavigateToCamera,
@@ -275,10 +300,10 @@ fun DashboardContent(
                     DeviceControlCard(
                         title = "Main Entrance",
                         statusText = if (lockStatus) "Locked" else "Unlocked",
-                        actionText = if (lockStatus) {
-                            if (isOwnerAuthenticated) "Unlock" else "Verify to Unlock"
+                        actionText = if (isOwnerAuthenticated) {
+                            if (lockStatus) "Unlock" else "Lock"
                         } else {
-                            "Lock"
+                            "Verify to Control"
                         },
                         icon = if (lockStatus) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
                         isActive = lockStatus,
@@ -289,7 +314,11 @@ fun DashboardContent(
                     DeviceControlCard(
                         title = "Living Room",
                         statusText = if (lightStatus) "Lights On" else "Lights Off",
-                        actionText = if (lightStatus) "Turn Off" else "Turn On",
+                        actionText = if (isOwnerAuthenticated) {
+                            if (lightStatus) "Turn Off" else "Turn On"
+                        } else {
+                            "Verify to Control"
+                        },
                         icon = Icons.Rounded.Lightbulb,
                         isActive = lightStatus,
                         onClick = onToggleLights
@@ -299,7 +328,11 @@ fun DashboardContent(
                     DeviceControlCard(
                         title = "Windows",
                         statusText = if (curtainStatus) "Curtains Open" else "Curtains Closed",
-                        actionText = if (curtainStatus) "Close" else "Open",
+                        actionText = if (isOwnerAuthenticated) {
+                            if (curtainStatus) "Close" else "Open"
+                        } else {
+                            "Verify to Control"
+                        },
                         icon = if (curtainStatus) Icons.Rounded.Curtains else Icons.Rounded.CurtainsClosed,
                         isActive = curtainStatus,
                         onClick = onToggleCurtains

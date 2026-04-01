@@ -116,7 +116,12 @@ fun VoiceScreen(
 
             Surface(
                 shape = CircleShape,
-                color = if (uiState.isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                color = when {
+                    !uiState.isOwnerAuthenticated -> MaterialTheme.colorScheme.surfaceVariant
+                    uiState.isListening -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.primary
+                },
+
                 modifier = Modifier
                     .size(100.dp)
                     .pointerInput(Unit) {
@@ -167,9 +172,14 @@ fun VoiceScreen(
         Spacer(modifier = Modifier.height(32.dp))
         
         Text(
-            text = "Try: 'Turn on lights', 'Open windows', or 'Unlock door'",
+            text = if (uiState.isOwnerAuthenticated) {
+                "Try: 'Turn on lights', 'Open windows', or 'Unlock door'"
+            } else {
+                "Verify identity in Access before using voice commands"
+            },
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
         )
+
     }
 }

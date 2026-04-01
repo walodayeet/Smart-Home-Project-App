@@ -97,6 +97,11 @@ class DashboardViewModel(
 
     fun toggleLights() {
         viewModelScope.launch {
+            if (!uiState.value.isOwnerAuthenticated) {
+                logRepository.insertLog("Protected action blocked: identity verification required", "Living Room")
+                return@launch
+            }
+
             val newState = !uiState.value.lightStatus
             repository.updateLightStatus(newState)
             logRepository.insertLog("Lights turned ${if (newState) "ON" else "OFF"}", "Living Room")
@@ -120,6 +125,11 @@ class DashboardViewModel(
 
     fun toggleCurtains() {
         viewModelScope.launch {
+            if (!uiState.value.isOwnerAuthenticated) {
+                logRepository.insertLog("Protected action blocked: identity verification required", "Windows")
+                return@launch
+            }
+
             val newState = !uiState.value.curtainStatus
             repository.updateCurtainStatus(newState)
             logRepository.insertLog("Curtains ${if (newState) "OPENED" else "CLOSED"}", "Bedroom")
@@ -143,6 +153,11 @@ class DashboardViewModel(
 
     fun triggerManualAlarm() {
         viewModelScope.launch {
+            if (!uiState.value.isOwnerAuthenticated) {
+                logRepository.insertLog("Protected action blocked: identity verification required", "Panic Button")
+                return@launch
+            }
+
             val newState = !uiState.value.isAlarmTriggered
             repository.updateAlarmTriggered(newState)
             logRepository.insertLog(

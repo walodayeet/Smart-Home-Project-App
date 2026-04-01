@@ -49,8 +49,15 @@ class VoiceViewModel(
 
     fun startListening(context: Context) {
         if (_uiState.value.isListening) return
+        if (!_uiState.value.isOwnerAuthenticated) {
+            _uiState.update {
+                it.copy(recognizedText = "Verify identity in Access before using voice control")
+            }
+            return
+        }
 
         if (speechRecognizer == null) {
+
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
             speechRecognizer?.setRecognitionListener(createRecognitionListener())
         }
@@ -124,24 +131,41 @@ class VoiceViewModel(
             val (commandLabel, logLocation) = when {
                 normalizedCommand.contains("light") &&
                     (normalizedCommand.contains("on") || normalizedCommand.contains("activate")) -> {
-                    repository.updateLightStatus(true)
-                    "Lights On ✅" to "Living Room"
+                    if (!_uiState.value.isOwnerAuthenticated) {
+                        "Identity verification required" to "Voice Control"
+                    } else {
+                        repository.updateLightStatus(true)
+                        "Lights On ✅" to "Living Room"
+                    }
                 }
                 normalizedCommand.contains("light") &&
                     (normalizedCommand.contains("off") || normalizedCommand.contains("dark")) -> {
-                    repository.updateLightStatus(false)
-                    "Lights Off 🌑" to "Living Room"
+                    if (!_uiState.value.isOwnerAuthenticated) {
+                        "Identity verification required" to "Voice Control"
+                    } else {
+                        repository.updateLightStatus(false)
+                        "Lights Off 🌑" to "Living Room"
+                    }
                 }
                 (normalizedCommand.contains("window") || normalizedCommand.contains("curtain")) &&
                     (normalizedCommand.contains("open") || normalizedCommand.contains("on")) -> {
-                    repository.updateCurtainStatus(true)
-                    "Windows Opened 🪟" to "Windows"
+                    if (!_uiState.value.isOwnerAuthenticated) {
+                        "Identity verification required" to "Voice Control"
+                    } else {
+                        repository.updateCurtainStatus(true)
+                        "Windows Opened 🪟" to "Windows"
+                    }
                 }
                 (normalizedCommand.contains("window") || normalizedCommand.contains("curtain")) &&
                     (normalizedCommand.contains("close") || normalizedCommand.contains("off")) -> {
-                    repository.updateCurtainStatus(false)
-                    "Windows Closed 🪟" to "Windows"
+                    if (!_uiState.value.isOwnerAuthenticated) {
+                        "Identity verification required" to "Voice Control"
+                    } else {
+                        repository.updateCurtainStatus(false)
+                        "Windows Closed 🪟" to "Windows"
+                    }
                 }
+
                 normalizedCommand.contains("unlock") || normalizedCommand.contains("open door") -> {
                     if (!_uiState.value.isOwnerAuthenticated) {
                         "Identity verification required" to "Voice Control"
@@ -151,8 +175,12 @@ class VoiceViewModel(
                     }
                 }
                 normalizedCommand.contains("lock") || normalizedCommand.contains("secure") -> {
-                    repository.updateLockStatus(true)
-                    "Door Locked 🔒" to "Main Entrance"
+                    if (!_uiState.value.isOwnerAuthenticated) {
+                        "Identity verification required" to "Voice Control"
+                    } else {
+                        repository.updateLockStatus(true)
+                        "Door Locked 🔒" to "Main Entrance"
+                    }
                 }
 
                 else -> {

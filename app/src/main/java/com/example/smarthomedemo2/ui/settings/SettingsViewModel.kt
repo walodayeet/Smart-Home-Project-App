@@ -19,19 +19,24 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
             initialValue = UserPreferences()
         )
 
+    private fun isOwnerVerified(): Boolean = uiState.value.isOwnerAuthenticated
+
     fun updateDoorLockTimer(seconds: Int) {
+        if (!isOwnerVerified()) return
         viewModelScope.launch {
             repository.updateDoorLockTimer(seconds)
         }
     }
 
     fun toggleAutomaticLocking(isEnabled: Boolean) {
+        if (!isOwnerVerified()) return
         viewModelScope.launch {
             repository.updateAutomaticLocking(isEnabled)
         }
     }
 
     fun updateDarkTheme(isDark: Boolean?) {
+        if (!isOwnerVerified()) return
         viewModelScope.launch {
             repository.updateDarkTheme(isDark)
         }
